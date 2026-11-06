@@ -16,25 +16,39 @@
 #include <common/types/generic.h>
 
 typedef enum {
-    storage    = 0,
-    network    = 1,
-    management = 2,
-    others     = 3,
+    storage     = 0,
+    network     = 1,
+    management  = 2,
+    ads_chiller = 3,
+    two_phase   = 4,
+    others      = 5
 } pdu_t;
 
+#define MAX_HOSTS 32
+
 #define pdu_type_to_str(t)                                                                                             \
-    ((t == storage) ? "storage" : ((t == network) ? "network" : ((t == management) ? "management" : "others")))
+    ((t == storage)                                                                                                    \
+         ? "storage"                                                                                                   \
+         : ((t == network)                                                                                             \
+                ? "network"                                                                                            \
+                : ((t == management)                                                                                   \
+                       ? "management"                                                                                  \
+                       : ((t == ads_chiller) ? "ads_chiller" : ((t == two_phase) ? "two_phase" : "others")))))
 
 typedef struct edcmon {
     char id[GENERIC_NAME];
     char host[GENERIC_NAME];
+    int port;
     pdu_t type;
     char sensors_list[1024];
     char pdu_list[1024];
+    int eargm_id;
 } edcmon_t;
 
 state_t EDCMON_token(char *token);
 state_t EDCMON_parse_token(edcmon_t **edcmon_i, unsigned int *num_edcmon_i, char *line);
 void print_edcmon_tags_conf(edcmon_t *edcmon_tag, uint i);
+state_t parse_host_list(char *host_list, char **hosts, int *ports, int *num_hosts);
+state_t parse_ip_port(char *string, char *ip, int *port);
 
 #endif

@@ -11,6 +11,7 @@
 #define _GNU_SOURCE
 
 #include <common/config.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +30,10 @@ static pdu_t from_str_to_pdu(char *desc)
         return network;
     if (strcmp(desc, "management") == 0)
         return management;
+    if (strcmp(desc, "ads_chiller") == 0)
+        return ads_chiller;
+    if (strcmp(desc, "two_phase") == 0)
+        return two_phase;
     else
         return others;
 }
@@ -42,6 +47,10 @@ static char *from_pdu_to_str(pdu_t t)
             return "network";
         case management:
             return "management";
+        case ads_chiller:
+            return "ads_chiller";
+        case two_phase:
+            return "two_phase";
         case others:
             return "others";
     }
@@ -51,8 +60,11 @@ static char *from_pdu_to_str(pdu_t t)
 static void set_default_edcmon_tag_values(edcmon_t *c_tag)
 {
     c_tag->type            = others;
+    c_tag->port            = 0;
+    c_tag->id[0]           = '\0';
     c_tag->sensors_list[0] = '\0';
     c_tag->pdu_list[0]     = '\0';
+    c_tag->eargm_id        = -1;
     snprintf(c_tag->host, sizeof(c_tag->host), "any");
 }
 
@@ -87,6 +99,7 @@ state_t EDCMON_parse_token(edcmon_t **edcmon_i, unsigned int *num_edcmon_i, char
     while (token != NULL) {
         key   = strtok_r(token, "=", &second_ptr);
         value = strtok_r(NULL, "=", &second_ptr);
+        debug("EDCMON parsing key %s value %s", key, value);
 
         if (key == NULL || value == NULL || !strlen(key) || !strlen(value)) {
             token = strtok_r(NULL, " ", &buffer_ptr);
@@ -112,21 +125,29 @@ state_t EDCMON_parse_token(edcmon_t **edcmon_i, unsigned int *num_edcmon_i, char
                 strcpy(edcmons[idx].id, value);
             }
         } else if (!strcmp(key, "HOST")) {
-            strncpy(edcmons[idx].host, value, sizeof(edcmons[idx].host) - 1);
+            parse_ip_port(value, edcmons[idx].host, &edcmons[idx].port);
         } else if (!strcmp(key, "PDU_TYPE")) {
             edcmons[idx].type = from_str_to_pdu(value);
         } else if (!strcmp(key, "PDU_IPS")) {
             strncpy(edcmons[idx].pdu_list, value, sizeof(edcmons[idx].pdu_list) - 1);
         } else if (!strcmp(key, "SENSOR_LIST")) {
             strncpy(edcmons[idx].sensors_list, value, sizeof(edcmons[idx].sensors_list) - 1);
-            value = strtok_r(NULL, "\"", &buffer_ptr);
-            if (value) {
-                strncat(edcmons[idx].sensors_list, " ", sizeof(edcmons[idx].sensors_list) - 1);
-                strncat(edcmons[idx].sensors_list, value,
-                        sizeof(edcmons[idx].sensors_list) - strlen(edcmons[idx].sensors_list) - 1);
+            // Only do continuation parsing if value is not empty quotes
+            if (strcmp(value, "\"\"") != 0) {
+                value = strtok_r(NULL, "\"", &buffer_ptr);
+                if (value) {
+                    strncat(edcmons[idx].sensors_list, " ", sizeof(edcmons[idx].sensors_list) - 1);
+                    strncat(edcmons[idx].sensors_list, value,
+                            sizeof(edcmons[idx].sensors_list) - strlen(edcmons[idx].sensors_list) - 1);
+                }
             }
             remove_chars(edcmons[idx].sensors_list, '"');
             remove_chars(edcmons[idx].sensors_list, '\n');
+        } else if (!strcmp(key, "EARGMID")) {
+            debug("Setting EARGMID %s", value);
+            edcmons[idx].eargm_id = atoi(value);
+        } else {
+            verbose(VCCONF, "EDCMONTAG: Unknown key %s", key);
         }
 
         token = strtok_r(NULL, " ", &buffer_ptr);
@@ -144,4 +165,59 @@ void print_edcmon_tags_conf(edcmon_t *edcmon_tag, uint i)
 
     verbose(VCCONF, "EDCMON[%u]: Host %s ID %s Type %s Sensors='%s' IPs='%s'", i, edcmon_tag->host, edcmon_tag->id,
             from_pdu_to_str(edcmon_tag->type), edcmon_tag->sensors_list, edcmon_tag->pdu_list);
+}
+
+state_t parse_host_list(char *host_list, char **hosts, int *ports, int *num_hosts)
+{
+    char *token;
+    char *saveptr;
+    int count = 0;
+    char ip[128];
+
+    if (!host_list || !hosts || !ports || !num_hosts) {
+        return EAR_ERROR;
+    }
+
+    token = strtok_r(host_list, ",", &saveptr);
+    while (token != NULL && count < MAX_HOSTS) {
+        while (isspace(*token))
+            token++;
+
+        if (parse_ip_port(token, ip, &ports[count]) == EAR_SUCCESS) {
+            hosts[count] = strdup(ip);
+            count++;
+        }
+
+        token = strtok_r(NULL, ",", &saveptr);
+    }
+
+    *num_hosts = count;
+    return EAR_SUCCESS;
+}
+
+state_t parse_ip_port(char *string, char *ip, int *port)
+{
+    if (!string || !ip || !port) {
+        return EAR_ERROR;
+    }
+
+    char *ip_str = strdup(string);
+    if (ip_str == NULL) {
+        return EAR_ERROR;
+    }
+
+    char *port_str = strchr(ip_str, ':');
+    if (port_str != NULL) {
+        *port_str = '\0'; // Terminate IP string at colon
+        port_str++;       // Move to port number
+        *port = atoi(port_str);
+    } else {
+        *port = -1; // No port specified
+    }
+
+    strcpy(ip, ip_str);
+
+    free(ip_str);
+
+    return EAR_SUCCESS;
 }
