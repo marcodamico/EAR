@@ -51,6 +51,7 @@ static char *_apis_tostr(uint api)
     else if (api == API_FILE      ) return "FILE";
     else if (api == API_DEMO      ) return "DEMO";
     else if (api == API_PVC_HWMON ) return "PVC_HWMON";
+    else if (api == API_MODBUS    ) return "MODBUS";
     return "NONE";
 }
 
@@ -82,6 +83,8 @@ static char *scope_tostr(uint scope)
     else if (scope == SCOPE_PROCESS) return "process";
     else if (scope == SCOPE_JOB    ) return "job";
     else if (scope == SCOPE_NODE   ) return "node";
+    else if (scope == SCOPE_RACK   ) return "rack";
+    else if (scope == SCOPE_CLUSTER) return "cluster";
     return "none";
 }
 

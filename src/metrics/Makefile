@@ -30,6 +30,15 @@ mets_OBJS = \
     $(SRCDIR)/metrics/common/script.o \
     $(SRCDIR)/metrics/common/redfish.o \
     $(SRCDIR)/metrics/common/cray_pm_counters.o \
+    $(SRCDIR)/metrics/common/modbus/emodbus.o \
+    $(SRCDIR)/metrics/common/modbus/ads_chiller_modbus.o \
+    $(SRCDIR)/metrics/common/modbus/two_phase_modbus.o \
+    $(SRCDIR)/metrics/ads_chiller/ads_chiller.o \
+    $(SRCDIR)/metrics/ads_chiller/archs/modbus.o \
+    $(SRCDIR)/metrics/ads_chiller/archs/dummy.o \
+    $(SRCDIR)/metrics/two_phase/two_phase.o \
+    $(SRCDIR)/metrics/two_phase/archs/modbus.o \
+    $(SRCDIR)/metrics/two_phase/archs/dummy.o \
     $(SRCDIR)/metrics/accumulators/power_metrics.o \
     $(SRCDIR)/metrics/bandwidth/bandwidth.o \
     $(SRCDIR)/metrics/bandwidth/archs/amd17.o \
@@ -141,6 +150,8 @@ clean: clean.components rclean
 	@ $(MAKE) -C 'bandwidth'    $* || exit
 	@ $(MAKE) -C 'cache'        $* || exit
 	@ $(MAKE) -C 'common'       $* || exit
+	@ $(MAKE) -C 'ads_chiller'  $* || exit
+	@ $(MAKE) -C 'two_phase'    $* || exit
 	@ $(MAKE) -C 'gpu'          $* || exit
 	@ $(MAKE) -C 'cpi'          $* || exit
 	@ $(MAKE) -C 'cpufreq'      $* || exit

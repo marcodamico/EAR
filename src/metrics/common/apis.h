@@ -51,6 +51,7 @@
 #define API_FILE               25
 #define API_DEMO               26
 #define API_PVC_HWMON          30
+#define API_MODBUS             41
 #define GRANULARITY_NONE       0
 #define GRANULARITY_DUMMY      1
 #define GRANULARITY_PROCESS    2
@@ -70,6 +71,8 @@
 #define SCOPE_PROCESS          0x200
 #define SCOPE_JOB              0x400
 #define SCOPE_NODE             0x300
+#define SCOPE_RACK             0x500
+#define SCOPE_CLUSTER          0x600
 #define O_NO_LOOP              0x1000
 #define O_POOL                 0x2000
 #define MONITORING_MODE_STOP   -1

@@ -35,7 +35,10 @@ comm_OBJS = \
 
 ######## RULES
 
-all: $(comm_BINS)
+all: modbus.build $(comm_BINS)
+
+modbus.build:
+	@ $(MAKE) -C 'modbus' || exit
 
 hsmp_esmi.o: hsmp_esmi.c hsmp_esmi.h
 	$(CC) $(CFLAGS) $(ESMI_CFLAGS) -c $<
@@ -75,7 +78,8 @@ install: ;
 
 %.install: ;
 
-clean: rclean;
+clean: rclean
+	@ $(MAKE) -C 'modbus' clean || exit
 
 ######## DEPENDENCIES
 
