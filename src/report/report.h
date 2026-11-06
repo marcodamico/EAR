@@ -36,6 +36,7 @@
 #define WF_APPLICATION        16
 
 #define NODESENSORS_TYPE      1000
+#define COOLING_MON_TYPE      1002
 
 /** This structure is used to pass information about the process calling your plugin function.
  * The API functions receive a parameter of this type with the calling process information. */

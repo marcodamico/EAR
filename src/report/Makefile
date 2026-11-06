@@ -31,6 +31,7 @@ repo_BINS = \
     mpitrace.so \
     log.so \
     nodesensor_log.so \
+    cooling_csv.so \
 	mpi_node_metrics.so
 ifeq ($(FEAT_DB_PSQL),1)
 repo_BINS += \
