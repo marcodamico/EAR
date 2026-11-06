@@ -19,6 +19,7 @@ m4_include([m4/ac_gsl.m4])
 m4_include([m4/ac_dlb.m4])
 m4_include([m4/ac_countdown.m4])
 m4_include([m4/ac_openssl.m4])
+m4_include([m4/ac_modbus.m4])
 m4_include([m4/ac_curl.m4])
 m4_include([m4/ac_jansson.m4])
 m4_include([m4/ac_microhttpd.m4])
@@ -79,6 +80,7 @@ X_AC_PBS
 X_AC_DLB
 X_AC_OPENSSL
 X_AC_COUNTDOWN
+X_AC_MODBUS
 X_AC_CMOCKA
 X_AC_CURL
 X_AC_JANSSON
