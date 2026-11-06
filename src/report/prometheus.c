@@ -18,6 +18,7 @@
 #include <common/states.h>
 #include <common/types/types.h>
 
+#include <data_center_monitor/plugins/cooling_monitor.h>
 #include <data_center_monitor/plugins/nodesensors.h>
 #include <report/report.h>
 
@@ -66,6 +67,7 @@ typedef struct text_buffer {
 
     // This is where the final text is stored
     char *final_text;
+    size_t final_text_size;
 } text_buffer_t;
 
 static text_buffer_t general_buffer;
@@ -83,7 +85,8 @@ static state_t buffer_alloc(text_buffer_t *buffer, uint32_t buff_size)
     for (i = 0; i < buff_size; i++)
         buffer->data[i].text = calloc(LINE_SIZE, sizeof(char));
 
-    buffer->final_text = calloc(buff_size * LINE_SIZE, sizeof(char));
+    buffer->final_text_size = buff_size * LINE_SIZE;
+    buffer->final_text      = calloc(buffer->final_text_size, sizeof(char));
 
     return EAR_SUCCESS;
 }
@@ -140,7 +143,11 @@ static state_t buffer_insert(text_buffer_t *buffer, char *text_to_insert, time_t
     memset(&buffer->data[buffer->max_num_entries], 0, sizeof(text_data_t));
 
     // normal procedure
-    i = buffer->max_num_entries;
+    i                    = buffer->max_num_entries;
+    buffer->data[i].text = calloc(LINE_SIZE, sizeof(char));
+    if (buffer->data[i].text == NULL) {
+        return EAR_ERROR;
+    }
     strcpy(buffer->data[i].text, text_to_insert);
     aux_time = time(NULL);
     buffer->data[i].insert_timestamp =
@@ -180,11 +187,26 @@ static void buffer_sort(text_buffer_t *buffer)
 // naive implementation of the buffer rebuilding
 void buffer_rebuild(text_buffer_t *buffer)
 {
-    int i;
-    strcpy(buffer->final_text, "");
+    int i, first;
+    size_t len = 0, total = 0;
 
-    for (i = 0; i < buffer->max_num_entries; i++)
-        strcat(buffer->final_text, buffer->data[i].text);
+    // final_text is handed to the HTTP daemon at init and cannot be reallocated, but the entries
+    // buffer can grow past its initial size. Entries are sorted oldest first, so when they do
+    // not fit the oldest ones are dropped.
+    for (first = buffer->max_num_entries; first > 0; first--) {
+        size_t tlen = strlen(buffer->data[first - 1].text);
+        if (total + tlen + 1 > buffer->final_text_size) {
+            debug("Prometheus page full, dropping %d entries", first);
+            break;
+        }
+        total += tlen;
+    }
+    for (i = first; i < buffer->max_num_entries; i++) {
+        size_t tlen = strlen(buffer->data[i].text);
+        memcpy(buffer->final_text + len, buffer->data[i].text, tlen);
+        len += tlen;
+    }
+    buffer->final_text[len] = '\0';
 }
 
 state_t report_init(report_id_t *id, cluster_conf_t *cconf)
@@ -192,7 +214,7 @@ state_t report_init(report_id_t *id, cluster_conf_t *cconf)
 
     sem_init(&prom_sem, 0, 1);
     sem_wait(&prom_sem);
-    buffer_alloc(&general_buffer, 100);
+    buffer_alloc(&general_buffer, 1024);
 
     d = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION, 9011, NULL, NULL, &ahc_echo, general_buffer.final_text,
                          MHD_OPTION_END);
@@ -341,6 +363,52 @@ state_t report_events(report_id_t *id, ear_event_t *events, uint count)
     return EAR_SUCCESS;
 }
 
+// Emits one gauge per measured cooling metric. Device/loop indexes are labels, not part of the
+// metric name, so dashboards can aggregate across devices without enumerating them.
+static void report_cooling_metric(cooling_data_t *data, const char *name, const char *unit, uint idx, double value,
+                                  time_t insert_time)
+{
+    char tmp_text[LINE_SIZE];
+    snprintf(tmp_text, sizeof(tmp_text), "%s_%s_%s{id=\"%lu\",dev=\"%u\"} %lf %lu\n", pdu_type_to_str(data->type), name,
+             unit, data->dev_id, idx, value, (ulong) data->timestamp * 1000);
+    buffer_insert(&general_buffer, tmp_text, &insert_time);
+}
+
+static void report_cooling_data(cooling_data_t *data, time_t insert_time)
+{
+    for (uint s = 0; s < data->num_in_temp_ht; s++)
+        report_cooling_metric(data, data->in_temp_ht[s].name, "celsius", s, data->in_temp_ht[s].value, insert_time);
+    for (uint s = 0; s < data->num_out_temp_ht; s++)
+        report_cooling_metric(data, data->out_temp_ht[s].name, "celsius", s, data->out_temp_ht[s].value, insert_time);
+    for (uint s = 0; s < data->num_flowrate; s++)
+        report_cooling_metric(data, data->flowrate[s].name, "litersperminute", s, data->flowrate[s].value, insert_time);
+    for (uint s = 0; s < data->num_power; s++)
+        report_cooling_metric(data, data->power[s].name, "watts", s, data->power[s].value, insert_time);
+
+    // ADS chiller-only loops and the plant's own electrical draw.
+    for (uint s = 0; s < data->num_ads_chiller_loops; s++) {
+        report_cooling_metric(data, data->in_temp_mt[s].name, "celsius", s, data->in_temp_mt[s].value, insert_time);
+        report_cooling_metric(data, data->out_temp_mt[s].name, "celsius", s, data->out_temp_mt[s].value, insert_time);
+        report_cooling_metric(data, data->in_temp_lt[s].name, "celsius", s, data->in_temp_lt[s].value, insert_time);
+        report_cooling_metric(data, data->out_temp_lt[s].name, "celsius", s, data->out_temp_lt[s].value, insert_time);
+        report_cooling_metric(data, data->evaporator_temp[s].name, "celsius", s, data->evaporator_temp[s].value,
+                              insert_time);
+        report_cooling_metric(data, data->condenser_temp[s].name, "celsius", s, data->condenser_temp[s].value,
+                              insert_time);
+        report_cooling_metric(data, data->flowrate_mt[s].name, "litersperminute", s, data->flowrate_mt[s].value,
+                              insert_time);
+        report_cooling_metric(data, data->flowrate_lt[s].name, "litersperminute", s, data->flowrate_lt[s].value,
+                              insert_time);
+        report_cooling_metric(data, data->chiller_power[s].name, "watts", s, data->chiller_power[s].value, insert_time);
+        report_cooling_metric(data, data->pump_power[s].name, "watts", s, data->pump_power[s].value, insert_time);
+    }
+    for (uint s = 0; s < data->num_flowrate; s++)
+        report_cooling_metric(data, "max_dev_temp", "celsius", s, data->max_dev_temp[s], insert_time);
+
+    // IT power associated with the cooling devices (node or EARGM domain).
+    report_cooling_metric(data, "total_power", "watts", 0, (double) data->total_power, insert_time);
+}
+
 state_t report_misc(report_id_t *id, uint type, const char *data_in, uint count)
 {
     char tmp_text[1024];
@@ -350,15 +418,19 @@ state_t report_misc(report_id_t *id, uint type, const char *data_in, uint count)
     buffer_clean(&general_buffer);
     time_t insert_time = time(NULL);
 
-    nodesensor_t *data = (nodesensor_t *) data_in;
-
     for (uint i = 0; i < count; i++) {
         switch (type) {
-            case NODESENSORS_TYPE:
+            case NODESENSORS_TYPE: {
+                nodesensor_t *data = (nodesensor_t *) data_in;
                 snprintf(tmp_text, sizeof(tmp_text), "%s{%s} %lf %lu\n", pdu_type_to_str(data[i].type),
                          data[i].nodename, data[i].power, data[i].timestamp * 1000);
                 buffer_insert(&general_buffer, tmp_text, &insert_time);
-
+            } break;
+            case COOLING_MON_TYPE: {
+                cooling_data_t *data = (cooling_data_t *) data_in;
+                report_cooling_data(&data[i], insert_time);
+            } break;
+            default:
                 break;
         }
     }

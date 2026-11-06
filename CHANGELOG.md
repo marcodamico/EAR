@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Cooling device monitoring in EDCMON: Modbus TCP support (libmodbus loaded at runtime,
+  `--with-modbus` configure option) for adsorption chillers (`ads_chiller`) and two-phase
+  cooling (`two_phase`), the `cooling_monitor.so` and `cooling_report.so` EDCMON plugins, and the
+  `cooling_csv.so` report plugin. The Prometheus report plugin exports cooling metrics.
+
+### Fixed
+
+- `conf.so` EDCMON plugin could not be loaded (`ear_conf_read` missing from libcommon).
+- EDCMON hung at shutdown when a plugin unregistered a monitor suscription.
+- Prometheus report plugin: crash when the metrics buffer grew, and overflow of the page buffer.
+
 ## [7.5.1] - 2026-11-03
 
 ### Added
