@@ -394,13 +394,16 @@ state_t monitor_register(suscription_t *s)
 
 state_t monitor_unregister(suscription_t *s)
 {
-    int id = s->id;
     int retval;
+    int id;
 
+    // Nothing to unregister if the monitor is not running. Initializing it here (as before)
+    // spawned a new monitor thread during shutdown that nobody stopped, so monitor_wait() hung.
     if (!is_running)
-        monitor_init();
+        return EAR_SUCCESS;
     if (s == NULL)
         return_msg(EAR_ERROR, "the suscription can't be NULL");
+    id = s->id;
     if (s->id > queue_last)
         return_msg(EAR_ERROR, "incorrect suscription index");
     if (s->id < 0)
